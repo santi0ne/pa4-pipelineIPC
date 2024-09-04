@@ -51,6 +51,13 @@ BMP_Image* createBMPImage(FILE* fptr) {
 		return NULL;
 	}
 	
+	//comprobando que el encabezado cumpla con los parametros establecidos
+        if(!checkBMPValid(&(image->header))){
+          printError(VALID_ERROR);
+          free(image);//IMPORTANTE: Liberamos la memoria asignada en caso de no ser valido
+          return NULL;
+        }
+	
 	//Compute data size, width, height, and bytes per pixel;
 	image->norm_height = abs(image->header.height_px);
     	int width = image->header.width_px;

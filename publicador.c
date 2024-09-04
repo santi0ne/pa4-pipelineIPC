@@ -29,18 +29,11 @@ void publish_img(char *filename) {
 
 	// lectura de la imagen
 	readImage(srcFile, dataImage);
-	fclose(srcFIle);
-	
-	// imagen valida?
-	if (!checkBMPValid(&dataImage->header) {
-		fprintf(stderr, "Publicador: La imagen BMP no es valida\n");
-		freeImage(dataImage);
-		exit(EXIT_FAILURE);
-	}
+	fclose(srcFile);
 	
 	// creacion de la memoria compartida
 	int shm_fd = shm_open(SHM_NAME, O_CREAT | O_RDWR, 0666);
-	if (sfm_fd == -1) {
+	if (shm_fd == -1) {
 		perror("Publicador: Error al crear memoria compartida\n");
 		freeImage(dataImage);
 		exit(EXIT_FAILURE);
@@ -73,7 +66,7 @@ void publish_img(char *filename) {
 	if (munmap(shared_img, SHM_SIZE) == -1) {
 		perror("Publicador: Error al desmapear la memoria compartida\n");
 		shm_unlink(SHM_NAME);
-		exit(EXIT_FAILURE):
+		exit(EXIT_FAILURE);
 	}
 
 	// cerrar el archivo de la memoria compartida

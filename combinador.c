@@ -6,7 +6,7 @@
 
 #include "bmp.h"
 
-#define SHM_SIZE sizeof(BMP_Image);
+#define SHM_SIZE sizeof(BMP_Image)
 #define SHM_NAME "/bmp_img_shm"
 
 void combine_images(const char *output_path) {
