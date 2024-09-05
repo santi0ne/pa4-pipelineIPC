@@ -1,81 +1,97 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <sys/mman.h>
 #include <string.h>
-
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include <semaphore.h>
 #include "bmp.h"
 
-#define SHM_SIZE sizeof(BMP_Image)
-#define SHM_NAME "/bmp_img_shm"
+#define SMOBJ_NAME "/img_sm"
+#define SEM_READY "/sem_ready"
+#define SMOBJ_SIZE sizeof(BMP_Image)
 
-void publish_img(char *filename) {
+int main (int argc, char *argv[]) {
 	
-	// abrir el archivo de la imagen
-	FILE *srcFile = fopen(filename, "rb");
-	if (srcFile == NULL) {
-		perror("Publicador: Error al abrir el archivo BMP\n");
-		exit(EXIT_FAILURE);
-	}
+	// validacion para argumentos que recibe
+    	if (argc != 2) {
+        	fprintf(stderr, "Publicador: Uso %s <ruta_imagen>\n", argv[0]);
+        	exit(EXIT_FAILURE);
+    	}
 
-	// creacion de la estructura BMP_Image
-	BMP_Image *dataImage = createBMPImage(srcFile);
+    	// iniciando programa
+    	printf("Publicador: Iniciando lectura de imagen en formato BMP...\n");
+
+    	char *img_path = argv[1];
+
+    	FILE *srcFile = fopen(img_path, "rb");
+    	if (srcFile == NULL) {
+        	fprintf(stderr, "Publicador: Error al abrir la imagen para lectura\n");
+        	exit(EXIT_FAILURE);
+    	}
+
+    	// creacion de la estructura BMP_Image
+    	BMP_Image *dataImage = createBMPImage(srcFile);
+    	if (!dataImage) {
+        	fprintf(stderr, "Error al crear la imagen BMP.\n");
+        	fclose(srcFile);
+        	exit(EXIT_FAILURE);
+    	}
+
+	// lectura de imagen BMP
+    	readImage(srcFile, dataImage);
+    	fclose(srcFile);
 	if (dataImage == NULL) {
-		perror("Publicador: Error al crear la estructura BMP_Image\n");
-		fclose(srcFile);
+		fprintf(stderr, "Publicador: Error al leer la imagen BMP\n");
 		exit(EXIT_FAILURE);
 	}
-
-	// lectura de la imagen
-	readImage(srcFile, dataImage);
-	fclose(srcFile);
 	
 	// creacion de la memoria compartida
-	int shm_fd = shm_open(SHM_NAME, O_CREAT | O_RDWR, 0666);
-	if (shm_fd == -1) {
-		perror("Publicador: Error al crear memoria compartida\n");
+	int sm_fd = shm_open(SMOBJ_NAME, O_CREAT | O_RDWR, 00600);
+	if (sm_fd == -1) {
+		fprintf(stderr, "Publicador: Error al crear la memoria compartida\n");
 		freeImage(dataImage);
 		exit(EXIT_FAILURE);
 	}
 	
-	// ajustar el tamanio de memoria compartida
-	if (ftruncate(shm_fd, SHM_SIZE) == -1) {
-		perror("Publicador: Error al ajustar tamanio de memoria compartida\n");
-		shm_unlink(SHM_NAME);
+	// asignar espacio para objeto
+	if (ftruncate(sm_fd, SMOBJ_SIZE) == -1) {
+		fprintf(stderr, "Publicador: Error al asignar espacio para imagen\n");
+		close(sm_fd);
+		freeImage(dataImage);
+	}
+	 	
+	// mapear la imagen en memoria compartida para ser usada en la memoria virtual de publicador
+	void *ptr = mmap(0, SMOBJ_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, sm_fd, 0);
+	if (ptr == MAP_FAILED) {
+		fprintf(stderr, "Publicador: Error al mapear imagen en memoria compartida\n");
+		close(sm_fd);
+		freeImage(dataImage);
+	}
+
+	// copiar la imagen a memoria compartida
+	memcpy(ptr, dataImage, SMOBJ_SIZE);
+
+	// signal: imagen lista en memoria compartida
+	sem_t *sem_ready = sem_open(SEM_READY, O_CREAT, 0644, 0);
+	if (sem_ready == SEM_FAILED) {
+		fprintf(stderr, "Publicador: Error al crear semaforo de listo\n");
+		munmap(ptr, SMOBJ_SIZE);
+		close(sm_fd);
 		freeImage(dataImage);
 		exit(EXIT_FAILURE);
 	}
 
-	// mapeo de memoria compartida
-	BMP_Image *shared_img = mmap(NULL, SHM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
-	if (shared_img == MAP_FAILED) {
-		perror("Publicador: Error al mapear la memoria compartida\n");
-		shm_unlink(SHM_NAME);
-		freeImage(dataImage);
-		exit(EXIT_FAILURE);
-	}
+	sem_post(sem_ready);
 
-	// copiar la imagen leida a la memoria compartida
-	memcpy(shared_img, dataImage, SHM_SIZE);
-
-	// liberacion de la memoria de la imagen leida
+	munmap(ptr, SMOBJ_SIZE);
+	close(sm_fd);
+	sem_close(sem_ready);
 	freeImage(dataImage);
 
-	// desmapear la memoria compartida
-	if (munmap(shared_img, SHM_SIZE) == -1) {
-		perror("Publicador: Error al desmapear la memoria compartida\n");
-		shm_unlink(SHM_NAME);
-		exit(EXIT_FAILURE);
-	}
-
-	// cerrar el archivo de la memoria compartida
-	if (close(shm_fd) == -1) {
-		perror("Publicador: Error al cerrar el archivo de la memoria compartida\n");
-		shm_unlink(SHM_NAME);
-		exit(EXIT_FAILURE);
-	}
-
-	printf("Publicador: La imagen BMP ha sido publicada en la memoria compartida...\n");
-
+	printf("Publicador: Imagen cargada en memoria compartida...\n");
+    	
+	exit(EXIT_SUCCESS);
 }

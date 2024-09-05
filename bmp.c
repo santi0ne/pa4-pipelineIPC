@@ -1,318 +1,173 @@
-#include <stdlib.h>
 #include <stdio.h>
-#include <stdint.h>
-#include <string.h>
-
+#include <stdlib.h>
 #include "bmp.h"
-/* USE THIS FUNCTION TO PRINT ERROR MESSAGES
-   DO NOT MODIFY THIS FUNCTION
-*/
-void printError(int error){
-	switch(error){
-  		case ARGUMENT_ERROR:
-    			printf("Usage:ex5 <source> <destination>\n");
-    			break;
-  		case FILE_ERROR:
-    			printf("Unable to open file!\n");
-    			break;
-  		case MEMORY_ERROR:
-    			printf("Unable to allocate memory!\n");
-    			break;
-  		case VALID_ERROR:
-    			printf("BMP file not valid!\n");
-    			break;
-  		default:
-    		break;
-  	}
+
+// Función para imprimir errores
+void printError(int error) {
+    switch (error) {
+        case ARGUMENT_ERROR:
+            printf("Argument Error\n");
+            break;
+        case FILE_ERROR:
+            printf("File Error\n");
+            break;
+        case MEMORY_ERROR:
+            printf("Memory Error\n");
+            break;
+        case VALID_ERROR:
+            printf("BMP file not valid!\n");
+            break;
+        default:
+            printf("Unknown Error\n");
+            break;
+    }
 }
 
-/* The input argument is the source file pointer. The function will first construct a BMP_Image image by allocating memory to it.
- * Then the function read the header from source image to the image's header.
- * Compute data size, width, height, and bytes_per_pixel of the image and stores them as image's attributes.
- * Finally, allocate menory for image's data according to the image size.
- * Return image;
-*/
-BMP_Image* createBMPImage(FILE* fptr) {
+// Crear estructura BMP_Image
+BMP_Image* createBMPImage() {
+    BMP_Image* newImage = (BMP_Image*) malloc(sizeof(BMP_Image));
+    if (newImage == NULL) {
+        printError(MEMORY_ERROR);
+        return NULL;
+    }
+    newImage->pixels = NULL;
+    return newImage;
+}
 
-	//Allocate memory for BMP_Image*;
-	BMP_Image* image = (BMP_Image *)malloc(sizeof(BMP_Image));
-	if (!image) {
-		printf("error al asignar memoria con malloc BMP_Image\n");
-		printError(MEMORY_ERROR);
-		return NULL;
-	}
-	
-	//Read the first 54 bytes of the source into the header
-	size_t bytes_read = fread(&(image->header), sizeof(BMP_Header), 1, fptr);
-	if (bytes_read != 1) {
-		printf("error al leer los 54 bytes de header\n");
-		printError(FILE_ERROR);
-		free(image);
-		return NULL;
-	}
-	
-	//comprobando que el encabezado cumpla con los parametros establecidos
-        if(!checkBMPValid(&(image->header))){
-          printError(VALID_ERROR);
-          free(image);//IMPORTANTE: Liberamos la memoria asignada en caso de no ser valido
-          return NULL;
+// Leer datos de la imagen
+void readImageData(FILE *srcFile, BMP_Image *dataImage, int dataSize) {
+    dataImage->pixels = (Pixel**) malloc(sizeof(Pixel*) * dataImage->norm_height);
+    if (dataImage->pixels == NULL) {
+        printError(MEMORY_ERROR);
+        return;
+    }
+
+    for (int i = 0; i < dataImage->norm_height; i++) {
+        dataImage->pixels[i] = (Pixel*) malloc(sizeof(Pixel) * dataImage->header.width_px);
+        if (dataImage->pixels[i] == NULL) {
+            printError(MEMORY_ERROR);
+            return;
         }
-	
-	//Compute data size, width, height, and bytes per pixel;
-	image->norm_height = abs(image->header.height_px);
-    	int width = image->header.width_px;
-    	int height = image->norm_height;
-    	int bytesPerPixel = image->header.bits_per_pixel / 8;
-    	image->bytes_per_pixel = bytesPerPixel;
+    }
 
-    	int row_size = ((width * bytesPerPixel + 3) / 4) * 4;
-
-	//Allocate memory for image data
-	image->pixels = (Pixel **)malloc(height * sizeof(Pixel *));
-	if (!image->pixels) {
-		printf("error al alojar memoria para pixeles de image\n");
-		printError(MEMORY_ERROR);
-		free(image);
-		return NULL;
-	}
-	
-	for (int i = 0; i < height; i++) {
-        	image->pixels[i] = (Pixel *)malloc(row_size);
-        	if (!image->pixels[i]) {
-            		printError(MEMORY_ERROR);
-            		for (int j = 0; j < i; j++) {
-                		free(image->pixels[j]);
-            		}
-            		free(image->pixels);
-            		free(image);
-            		return NULL;
-        	}
-		memset(image->pixels[i], 0, row_size);
-    	}
-
-	fseek(fptr, image->header.offset, SEEK_SET);
-
-	return image;
+    fseek(srcFile, dataImage->header.offset, SEEK_SET);
+    for (int i = 0; i < dataImage->norm_height; i++) {
+        fread(dataImage->pixels[i], sizeof(Pixel), dataImage->header.width_px, srcFile);
+    }
 }
 
-/* The input arguments are the source file pointer, the image data pointer, and the size of image data.
- * The functions reads data from the source into the image data matriz of pixels.
-*/
-void readImageData(FILE* srcFile, BMP_Image * image, int dataSize) {
-	int height = image->norm_height;
-	int width = image->header.width_px;
-	int bytesPerPixel = image->bytes_per_pixel;
-	int row_size = ((width * bytesPerPixel + 3) / 4) * 4;
-
-	if (image->header.height_px > 0) {
-		// imagen almacenada de abajo hacia arriba
-		for (int i=0; i<height; i++) {
-			if (fread(image->pixels[height-1-i], row_size, 1, srcFile) != 1) {
-				printf("error al leer imagen almacenada de abajo hacia arriba\n");
-				printError(FILE_ERROR);
-				for (int j=height-1; j>=i; j--) {
-					free(image->pixels[j]);
-				}
-				free(image->pixels);
-				free(image);
-				return;
-			}
-		}
-	}
-	else {
-		// imagen almacenada de arriba hacia abajo
-		for (int i=0; i<height; i++) {
-			if (fread(image->pixels[i], row_size, 1, srcFile) != 1) {
-				printf("error al leer imagen almacenada de arriba hacia abajo\n");
-				printError(FILE_ERROR);
-				for (int j=0; j<=i; j++) {
-					free(image->pixels[j]);
-				}
-				free(image->pixels);
-				free(image);
-				return;
-			}
-		}
-	}
-}
-
-/* The input arguments are the pointer of the binary file, and the image data pointer.
- * The functions open the source file and call to CreateBMPImage to load de data image.
-*/
+// Leer el encabezado y la imagen completa
 void readImage(FILE *srcFile, BMP_Image *dataImage) {
-	BMP_Image *image = createBMPImage(srcFile);
-	if (!image) {
-		printf("error al crear bmp de source\n");
-		printError(VALID_ERROR);
-		return;
-	}
+    // Verificar si el archivo está abierto correctamente
+    if (srcFile == NULL) {
+        printError(FILE_ERROR);
+        return;
+    }
 
-	int row_size = ((image->header.width_px * image->bytes_per_pixel + 3) / 4) * 4;
-    	int data_size = row_size * image->norm_height;
+    //printf("Iniciando lectura de imagen en formato BMP\n");
 
-	readImageData(srcFile, image, data_size);
-	
-	// Alojar memoria para dataImage en caso de este ser NULL
-    	if (dataImage == NULL) {
-        	dataImage = (BMP_Image *)malloc(sizeof(BMP_Image));
-        	if (!dataImage) {
-            		printf("Error allocating memory for dataImage\n");
-            		printError(MEMORY_ERROR);
-            		free(image->pixels);
-            		free(image);
-            		return;
-        	}
-    	}
-    	
-    	// Copiar el encabezado de la imagen
-    	memcpy(&dataImage->header, &image->header, sizeof(BMP_Header));
-    	dataImage->norm_height = image->norm_height;
-    	dataImage->bytes_per_pixel = image->bytes_per_pixel;
+    // Leer encabezado del archivo
+    if (fread(&(dataImage->header), sizeof(BMP_Header), 1, srcFile) != 1) {
+        printError(FILE_ERROR);
+        return;
+    }
 
-    	// Alojar memoria para los pixeles de dataImage
-    	dataImage->pixels = (Pixel **)malloc(dataImage->norm_height * sizeof(Pixel *));
-    	if (!dataImage->pixels) {
-        	printf("Error allocating memory for dataImage pixels\n");
-        	printError(MEMORY_ERROR);
-        	free(image->pixels);
-        	free(image);
-        	free(dataImage);
-        	return;
-    	}
+    // Validar el BMP
+    //printf("Validando BMP header...\n");
+    if (checkBMPValid(&(dataImage->header)) == FALSE) {
+        printError(VALID_ERROR);
+        return;
+    }
 
-    	for (int i = 0; i < dataImage->norm_height; i++) {
-        	dataImage->pixels[i] = (Pixel *)malloc(row_size);
-        	if (!dataImage->pixels[i]) {
-            		printf("Error allocating memory for row of dataImage pixels\n");
-            		printError(MEMORY_ERROR);
-            		for (int j = 0; j < i; j++) {
-                		free(dataImage->pixels[j]);
-            		}
-            		free(dataImage->pixels);
-            		free(image->pixels);
-            		free(image);
-            		free(dataImage);
-            		return;
-        	}
-        	memcpy(dataImage->pixels[i], image->pixels[i], row_size);
-    	}
+    // Calcular altura normalizada y bytes por píxel
+    dataImage->norm_height = abs(dataImage->header.height_px);
+    dataImage->bytes_per_pixel = dataImage->header.bits_per_pixel / 8;
 
-    	freeImage(image);
+    // Imprimir información del BMP
+    printf("Tipo de archivo: %x\n", dataImage->header.type);
+    printf("Bits por pixel: %u\n", dataImage->header.bits_per_pixel);
+    printf("Planos: %u\n", dataImage->header.planes);
+    printf("Compresión: %u\n", dataImage->header.compression);
+
+    // Leer datos de la imagen
+    int dataSize = dataImage->header.width_px * dataImage->norm_height * dataImage->bytes_per_pixel;
+    readImageData(srcFile, dataImage, dataSize);
 }
 
-/* The input arguments are the destination file name, and BMP_Image pointer.
- * The function write the header and image data into the destination file.
-*/
+// Escribir la imagen en un archivo
 void writeImage(char* destFileName, BMP_Image* dataImage) {
-	// abrir archivo de destino para escritura binaria
-	FILE *destFile = fopen(destFileName, "wb");
-	if (!destFile) {
-		printf("error al abrir archivo de destino en modo escritura binaria\n");
-		printError(FILE_ERROR);
-		return;
-	}
+    FILE *destFile = fopen(destFileName, "wb");
+    if (destFile == NULL) {
+        printError(FILE_ERROR);
+        return;
+    }
 
-	// escribir el header de imagen en archivo de destino
-	if (fwrite(&(dataImage->header), HEADER_SIZE, 1, destFile) != 1) {
-		printf("error al escribir header en archivo destino\n");
-		printError(FILE_ERROR);
-		fclose(destFile);
-		return;
-	}
+    // Escribir encabezado
+    fwrite(&(dataImage->header), sizeof(BMP_Header), 1, destFile);
 
-	int row_size = ((dataImage->header.width_px * dataImage->bytes_per_pixel + 3) / 4) * 4;
-	fseek(destFile, dataImage->header.offset, SEEK_SET);
+    // Escribir datos de imagen
+    for (int i = 0; i < dataImage->norm_height; i++) {
+        fwrite(dataImage->pixels[i], sizeof(Pixel), dataImage->header.width_px, destFile);
+    }
 
-	// escribir los datos de pixeles en destino
-	int height = dataImage->norm_height;
-
-	if (dataImage->header.height_px > 0) {
-        	// La imagen está almacenada de abajo hacia arriba
-        	for (int i = height - 1; i >= 0; i--) {
-            		if (fwrite(dataImage->pixels[i], row_size, 1, destFile) != 1) {
-                		printf("error al escribir pixeles de abajo hacia arriba\n");
-				printError(FILE_ERROR);
-                		fclose(destFile);
-                		return;
-            		}
-        	}
-    	}
-	else {
-        	// La imagen está almacenada de arriba hacia abajo
-        	for (int i = 0; i < height; i++) {
-            		if (fwrite(dataImage->pixels[i], row_size, 1, destFile) != 1) {
-                		printf("error al escribir pixeles de arriba hacia abajo\n");
-				printError(FILE_ERROR);
-                		fclose(destFile);
-                		return;
-            		}
-        	}
-    	}
-
-	fclose(destFile);
+    fclose(destFile);
 }
 
-/* The input argument is the BMP_Image pointer. The function frees memory of the BMP_Image.
-*/
+// Liberar la memoria de la imagen
 void freeImage(BMP_Image* image) {
-	if (!image) return;
-	
-	// liberar la memoria de cada fila de la matriz de pixeles
-	int height = image->norm_height;
-	for (int i=0; i<height; i++) {
-		free(image->pixels[i]);
-	}
-	
-	// liberar la memoria de la matriz de punteros a filas
-	free(image->pixels);
-
-	// liberar la memoria de la estructura BMP_Image
-	free(image);
+    for (int i = 0; i < image->norm_height; i++) {
+        free(image->pixels[i]);
+    }
+    free(image->pixels);
+    free(image);
 }
 
-/* The functions checks if the source image has a valid format.
- * It returns TRUE if the image is valid, and returns FASLE if the image is not valid.
- * DO NOT MODIFY THIS FUNCTION
-*/
+// Validar el encabezado BMP
 int checkBMPValid(BMP_Header* header) {
-  // Make sure this is a BMP file
-  if (header->type != 0x4d42) {
-    return FALSE;
-  }
-  // Make sure we are getting 24 bits per pixel
-  if (header->bits_per_pixel != 24) {
-    return FALSE;
-  }
-  // Make sure there is only one image plane
-  if (header->planes != 1) {
-    return FALSE;
-  }
-  // Make sure there is no compression
-  if (header->compression != 0) {
-    return FALSE;
-  }
-  return TRUE;
+    printf("Validando BMP header...\n");
+
+    // Verificar el tipo de archivo
+    if (header->type != 0x4D42) {
+        printf("El tipo de archivo no es BMP (esperado 0x4D42, recibido: 0x%x)\n", header->type);
+        return FALSE;
+    }
+
+    // Verificar bits por píxel (24 bits)
+    if (header->bits_per_pixel != 24) {
+        printf("El archivo no tiene 24 bits por píxel (esperado 24, recibido: %u)\n", header->bits_per_pixel);
+        return FALSE;
+    }
+
+    // Verificar que no haya compresión (debe ser 0)
+    if (header->compression != 0) {
+        printf("El archivo BMP está comprimido (esperado 0, recibido: %u)\n", header->compression);
+        return FALSE;
+    }
+
+    // Verificar que haya un solo plano
+    if (header->planes != 1) {
+        printf("El archivo BMP tiene más de un plano (esperado 1, recibido: %u)\n", header->planes);
+        return FALSE;
+    }
+
+    return TRUE;
 }
 
-/* The function prints all information of the BMP_Header.
-   DO NOT MODIFY THIS FUNCTION
-*/
+// Imprimir el encabezado BMP
 void printBMPHeader(BMP_Header* header) {
-  printf("file type (should be 0x4d42): %x\n", header->type);
-  printf("file size: %d\n", header->size);
-  printf("offset to image data: %d\n", header->offset);
-  printf("header size: %d\n", header->header_size);
-  printf("width_px: %d\n", header->width_px);
-  printf("height_px: %d\n", header->height_px);
-  printf("planes: %d\n", header->planes);
-  printf("bits: %d\n", header->bits_per_pixel);
+    printf("BMP Header Information:\n");
+    printf("Tipo de archivo: %x\n", header->type);
+    printf("Tamaño del archivo: %u bytes\n", header->size);
+    printf("Ancho de la imagen: %d px\n", header->width_px);
+    printf("Alto de la imagen: %d px\n", header->height_px);
+    printf("Bits por pixel: %u\n", header->bits_per_pixel);
+    printf("Compresión: %u\n", header->compression);
 }
 
-/* The function prints information of the BMP_Image.
-   DO NOT MODIFY THIS FUNCTION
-*/
+// Imprimir la información de la imagen BMP
 void printBMPImage(BMP_Image* image) {
-  printf("data size is %ld\n", sizeof(image->pixels));
-  printf("norm_height size is %d\n", image->norm_height);
-  printf("bytes per pixel is %d\n", image->bytes_per_pixel);
+    printBMPHeader(&(image->header));
+    printf("Altura normalizada: %d\n", image->norm_height);
+    printf("Bytes por píxel: %d\n", image->bytes_per_pixel);
 }
+
