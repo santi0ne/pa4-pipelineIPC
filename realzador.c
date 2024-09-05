@@ -11,11 +11,12 @@
 #include "bmp.h"
 
 #define SMOBJ_NAME "/img_sm"
-#define SEM_READY "/sem_ready"
+#define SEM_BLUR_DONE "/sem_blur_done"
 #define SEM_EDGE_DONE "/sem_edge_done"
 
-void* apply_edge(void* arg) {
+void* apply_edge(BMP_Image *img) {
 	// algoritmo
+	printf("Realzador: Aplicando realce de bordes a imagen...\n");
 	return NULL;
 }
 
@@ -30,13 +31,23 @@ int main(int argc, char *argv[]) {
 	printf("Realzador: Iniciando proceso de realce de bordes...\n");
 
 	// esperar a que la imagen este lista en la memoria compartida
+	/*
 	sem_t *sem_ready = sem_open(SEM_READY, 0);
 	if (sem_ready == SEM_FAILED) {
 		fprintf(stderr, "Realzador: Error al abrir memoria compartida\n");
 		exit(EXIT_FAILURE);
 	}
 	sem_wait(sem_ready);
-	sem_close(sem_ready);
+	sem_close(sem_ready);*/
+	
+	// esperar a que desenfocador termine
+	sem_t *sem_blur_done = sem_open(SEM_BLUR_DONE, 0);
+    	if (sem_blur_done == SEM_FAILED) {
+        	fprintf(stderr, "Realzador: Error al abrir semáforo de desenfoque completado\n");
+        	exit(EXIT_FAILURE);
+    	}
+    	sem_wait(sem_blur_done);
+    	sem_close(sem_blur_done);
 
 	// abriendo memoria compartida
 	int sm_fd = shm_open(SMOBJ_NAME, O_RDONLY, 0);
@@ -55,27 +66,28 @@ int main(int argc, char *argv[]) {
 	size_t sm_size = shmobj_st.st_size;
 
 	// mapear el objeto de memoria compartida (imagen)
-	void *ptr = mmap(NULL, sm_size, PROT_READ, MAP_SHARED, sm_fd, 0);
-	if (ptr == MAP_FAILED) {
+	BMP_Image *dataImage = mmap(NULL, sm_size, PROT_READ, MAP_SHARED, sm_fd, 0);
+	if (dataImage == MAP_FAILED) {
 		fprintf(stderr, "Realzador: Error al mapear imagen en memoria compartida\n");
 		close(sm_fd);
 		exit(EXIT_FAILURE);
 	}
 
 	/* Aqui va l algoritmo para creacion de hilos */
+	apply_edge(dataImage);
 
 	// signal: realce aplicado
 	sem_t *sem_edge_done = sem_open(SEM_EDGE_DONE, O_CREAT, 0644, 0);
 	if (sem_edge_done == SEM_FAILED) {
 		fprintf(stderr, "Realzador: Error al crear semaforo de edge\n");
-		munmap(ptr, sm_size);
+		munmap(dataImage, sm_size);
 		close(sm_fd);
 		exit(EXIT_FAILURE);
 	}
 
 	sem_post(sem_edge_done);
 
-	munmap(ptr, sm_size);
+	munmap(dataImage, sm_size);
 	close(sm_fd);
 	sem_close(sem_edge_done);
 	
