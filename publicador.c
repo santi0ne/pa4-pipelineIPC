@@ -91,7 +91,7 @@ int main (int argc, char *argv[]) {
 	sem_close(sem_ready);
 	freeImage(dataImage);
 
-	printf("Publicador: Imagen cargada en memoria compartida...\n");
+	printf("Publicador: Imagen cargada en memoria compartida...\n\n");
     	
 	exit(EXIT_SUCCESS);
 }

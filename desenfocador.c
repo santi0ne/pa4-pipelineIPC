@@ -13,6 +13,7 @@
 #define SMOBJ_NAME "/img_sm" 
 #define SEM_READY "/sem_ready"
 #define SEM_BLUR_DONE "/sem_blur_done"
+#define SEM_EDGE_DONE "/sem_edge_done"
 
 void* apply_blur(BMP_Image *img) {
 	// algoritmo
@@ -38,6 +39,7 @@ int main(int argc, char *argv[]) {
     	}
     	sem_wait(sem_ready);
     	sem_close(sem_ready);
+    	sem_unlink(SEM_READY);
 
 	// abriendo memoria compartida
 	int sm_fd = shm_open(SMOBJ_NAME, O_RDONLY, 0);
@@ -77,7 +79,6 @@ int main(int argc, char *argv[]) {
 	sem_post(sem_blur_done);
 	
 	// esperar a que realzador termine su trabajo
-	/*
 	sem_t *sem_edge_done = sem_open(SEM_EDGE_DONE, 0);
     	if (sem_edge_done == SEM_FAILED) {
         	fprintf(stderr, "Desenfocador: Error al abrir semáforo de realce de bordes\n");
@@ -85,14 +86,14 @@ int main(int argc, char *argv[]) {
         	close(sm_fd);
         	exit(EXIT_FAILURE);
     	}
-	sem_wait(sem_edge_done); */
+	sem_wait(sem_edge_done);
 
 	munmap(dataImage, sm_size);
 	close(sm_fd);
 	sem_close(sem_blur_done);
-	//sem_close(sem_edge_done);
+	sem_close(sem_edge_done);
 
-	printf("Desenfocador: Proceso de desenfoque terminado con exito!\n");
+	printf("Desenfocador: Proceso de desenfoque terminado con exito!\n\n");
 
 	exit(EXIT_SUCCESS);
 }

@@ -27,6 +27,7 @@ int save_result_image(BMP_Image *image, const char *output) {
 }
 
 int main(int argc, char *argv[]) {
+
 	if (argc != 2) {
 		fprintf(stderr, "Combinador: Uso %s <ruta_imagen_salida>\n", argv[0]);
 		exit(EXIT_FAILURE);
@@ -44,6 +45,7 @@ int main(int argc, char *argv[]) {
 	}
 	sem_wait(sem_blur_done);
 	sem_close(sem_blur_done);
+	sem_unlink(SEM_BLUR_DONE);
 
 	// esperar a que el realzador termine
 	sem_t *sem_edge_done = sem_open(SEM_EDGE_DONE, 0);
@@ -51,6 +53,9 @@ int main(int argc, char *argv[]) {
 		fprintf(stderr, "Combinador: Error al abrir semaforo de realce\n");
 		exit(EXIT_FAILURE);
 	}
+	sem_wait(sem_edge_done);
+	sem_close(sem_edge_done);
+	sem_unlink(SEM_EDGE_DONE);
 
 	// abrir memoria compartida
 	int sm_fd = shm_open(SMOBJ_NAME, O_RDWR, 0);
@@ -90,7 +95,7 @@ int main(int argc, char *argv[]) {
 	munmap(dataImage, sm_size);
 	close(sm_fd);
 
-	printf("Combinador: Imagen combinada guardada con exito en %s!\n", output_filename);
+	printf("Combinador: Imagen combinada guardada con exito en %s!\n\n", output_filename);
 
 	exit(EXIT_SUCCESS);
 

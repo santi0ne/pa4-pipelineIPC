@@ -91,7 +91,7 @@ int main(int argc, char *argv[]) {
 	close(sm_fd);
 	sem_close(sem_edge_done);
 	
-	printf("Realzador: Proceso de realce terminado con exito!\n");
+	printf("Realzador: Proceso de realce terminado con exito!\n\n");
 
 	exit(EXIT_SUCCESS);
 }
