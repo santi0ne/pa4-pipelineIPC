@@ -92,9 +92,6 @@ int main (int argc, char *argv[]) {
 	freeImage(dataImage);
 
 	printf("Publicador: Imagen cargada en memoria compartida...\n\n");
-	
-	//shm_unlink(SMOBJ_NAME);
-	//sem_unlink(SEM_READY);
-    	
+	    	
 	exit(EXIT_SUCCESS);
 }

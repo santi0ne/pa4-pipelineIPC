@@ -14,7 +14,7 @@
 #define SEM_BLUR_DONE "/sem_blur_done"
 #define SEM_EDGE_DONE "/sem_edge_done"
 
-void* apply_edge(BMP_Image *img) {
+void* apply_edge(BMP_Image *img, int num_threads) {
 	// algoritmo
 	printf("Realzador: Aplicando realce de bordes a imagen...\n");
 	return NULL;
@@ -24,21 +24,11 @@ int main(int argc, char *argv[]) {
 
 	// verificacion para argumentos que recibe
 	if (argc != 2) {
-		fprintf(stderr, "Realzador: Uso %s <ruta_imagen_salida>\n", argv[0]);
+		fprintf(stderr, "Realzador: Uso %s <numero_hilos>\n", argv[0]);
 		exit(EXIT_FAILURE);
 	}
 
 	printf("Realzador: Iniciando proceso de realce de bordes...\n");
-
-	// esperar a que la imagen este lista en la memoria compartida
-	/*
-	sem_t *sem_ready = sem_open(SEM_READY, 0);
-	if (sem_ready == SEM_FAILED) {
-		fprintf(stderr, "Realzador: Error al abrir memoria compartida\n");
-		exit(EXIT_FAILURE);
-	}
-	sem_wait(sem_ready);
-	sem_close(sem_ready);*/
 	
 	// esperar a que desenfocador termine
 	sem_t *sem_blur_done = sem_open(SEM_BLUR_DONE, 0);
@@ -47,8 +37,7 @@ int main(int argc, char *argv[]) {
         	exit(EXIT_FAILURE);
     	}
     	sem_wait(sem_blur_done);
-    	//sem_close(sem_blur_done);
-
+    	
 	// abriendo memoria compartida
 	int sm_fd = shm_open(SMOBJ_NAME, O_RDONLY, 0);
 	if (sm_fd == -1) {
@@ -73,8 +62,9 @@ int main(int argc, char *argv[]) {
 		exit(EXIT_FAILURE);
 	}
 
-	/* Aqui va l algoritmo para creacion de hilos */
-	apply_edge(dataImage);
+	/* Aqui va el algoritmo para creacion de hilos */
+	int num_threads = argv[1];
+	apply_edge(dataImage, num_threads);
 
 	// signal: realce aplicado
 	sem_t *sem_edge_done = sem_open(SEM_EDGE_DONE, O_CREAT, 0666, 0);
@@ -89,6 +79,10 @@ int main(int argc, char *argv[]) {
 
 	munmap(dataImage, sm_size);
 	close(sm_fd);
+
+	// ojo: post necesario a blur para evitar errores en combinador
+	sem_post(sem_blur_done);
+
 	sem_close(sem_blur_done);
 	sem_close(sem_edge_done);
 	

@@ -15,7 +15,7 @@
 #define SEM_BLUR_DONE "/sem_blur_done"
 #define SEM_EDGE_DONE "/sem_edge_done"
 
-void* apply_blur(BMP_Image *img) {
+void* apply_blur(BMP_Image *img, int num_threads) {
 	// algoritmo
 	printf("Desenfocador: Aplicando desenfoque a imagen...\n");
 	return NULL;
@@ -25,7 +25,7 @@ int main(int argc, char *argv[]) {
 	
 	// verificacion para argumentos que recibe
 	if (argc != 2) {
-		fprintf(stderr, "Desenfocador: Uso %s <ruta_imagen_salida>\n", argv[0]);
+		fprintf(stderr, "Desenfocador: Uso %s <numero_hilos>\n", argv[0]);
 		exit(EXIT_FAILURE);
 	}
 
@@ -38,8 +38,7 @@ int main(int argc, char *argv[]) {
         	exit(EXIT_FAILURE);
     	}
     	sem_wait(sem_ready);
-    	//sem_unlink(SEM_READY);
-
+    	
 	// abriendo memoria compartida
 	int sm_fd = shm_open(SMOBJ_NAME, O_RDONLY, 0);
 	if (sm_fd == -1) {
@@ -65,7 +64,8 @@ int main(int argc, char *argv[]) {
 	}
 
 	/* Aqui va el algoritmo para creacion de hilos */
-	apply_blur(dataImage);
+	int num_threads = argv[1];
+	apply_blur(dataImage, num_threads);
 	
 	// signal: desenfoque aplicado
 	sem_t *sem_blur_done = sem_open(SEM_BLUR_DONE, O_CREAT, 0666, 0);
@@ -77,17 +77,6 @@ int main(int argc, char *argv[]) {
 	}
 	sem_post(sem_blur_done);
 	
-	// esperar a que realzador termine su trabajo
-	/*
-	sem_t *sem_edge_done = sem_open(SEM_EDGE_DONE, O_CREAT, 0644, 0);
-    	if (sem_edge_done == SEM_FAILED) {
-        	fprintf(stderr, "Desenfocador: Error al abrir semáforo de realce de bordes\n");
-        	munmap(dataImage, sm_size);
-        	close(sm_fd);
-        	exit(EXIT_FAILURE);
-    	}
-	sem_wait(sem_edge_done);*/
-
 	munmap(dataImage, sm_size);
 	close(sm_fd);
 	sem_close(sem_ready);
