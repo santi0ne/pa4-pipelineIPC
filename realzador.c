@@ -47,7 +47,7 @@ int main(int argc, char *argv[]) {
         	exit(EXIT_FAILURE);
     	}
     	sem_wait(sem_blur_done);
-    	sem_close(sem_blur_done);
+    	//sem_close(sem_blur_done);
 
 	// abriendo memoria compartida
 	int sm_fd = shm_open(SMOBJ_NAME, O_RDONLY, 0);
@@ -77,7 +77,7 @@ int main(int argc, char *argv[]) {
 	apply_edge(dataImage);
 
 	// signal: realce aplicado
-	sem_t *sem_edge_done = sem_open(SEM_EDGE_DONE, O_CREAT, 0644, 0);
+	sem_t *sem_edge_done = sem_open(SEM_EDGE_DONE, O_CREAT, 0666, 0);
 	if (sem_edge_done == SEM_FAILED) {
 		fprintf(stderr, "Realzador: Error al crear semaforo de edge\n");
 		munmap(dataImage, sm_size);
@@ -89,6 +89,7 @@ int main(int argc, char *argv[]) {
 
 	munmap(dataImage, sm_size);
 	close(sm_fd);
+	sem_close(sem_blur_done);
 	sem_close(sem_edge_done);
 	
 	printf("Realzador: Proceso de realce terminado con exito!\n\n");

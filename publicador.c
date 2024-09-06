@@ -64,7 +64,7 @@ int main (int argc, char *argv[]) {
 	}
 	 	
 	// mapear la imagen en memoria compartida para ser usada en la memoria virtual de publicador
-	void *ptr = mmap(0, SMOBJ_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, sm_fd, 0);
+	BMP_Image *ptr = mmap(0, SMOBJ_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, sm_fd, 0);
 	if (ptr == MAP_FAILED) {
 		fprintf(stderr, "Publicador: Error al mapear imagen en memoria compartida\n");
 		close(sm_fd);
@@ -75,7 +75,7 @@ int main (int argc, char *argv[]) {
 	memcpy(ptr, dataImage, SMOBJ_SIZE);
 
 	// signal: imagen lista en memoria compartida
-	sem_t *sem_ready = sem_open(SEM_READY, O_CREAT, 0644, 0);
+	sem_t *sem_ready = sem_open(SEM_READY, O_CREAT, 0666, 0);
 	if (sem_ready == SEM_FAILED) {
 		fprintf(stderr, "Publicador: Error al crear semaforo de listo\n");
 		munmap(ptr, SMOBJ_SIZE);
@@ -92,6 +92,9 @@ int main (int argc, char *argv[]) {
 	freeImage(dataImage);
 
 	printf("Publicador: Imagen cargada en memoria compartida...\n\n");
+	
+	//shm_unlink(SMOBJ_NAME);
+	//sem_unlink(SEM_READY);
     	
 	exit(EXIT_SUCCESS);
 }

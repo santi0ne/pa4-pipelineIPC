@@ -45,7 +45,7 @@ int main(int argc, char *argv[]) {
 	}
 	sem_wait(sem_blur_done);
 	sem_close(sem_blur_done);
-	sem_unlink(SEM_BLUR_DONE);
+	//sem_unlink(SEM_BLUR_DONE);
 
 	// esperar a que el realzador termine
 	sem_t *sem_edge_done = sem_open(SEM_EDGE_DONE, 0);
@@ -55,7 +55,7 @@ int main(int argc, char *argv[]) {
 	}
 	sem_wait(sem_edge_done);
 	sem_close(sem_edge_done);
-	sem_unlink(SEM_EDGE_DONE);
+	//sem_unlink(SEM_EDGE_DONE);
 
 	// abrir memoria compartida
 	int sm_fd = shm_open(SMOBJ_NAME, O_RDWR, 0);

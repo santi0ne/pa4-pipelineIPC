@@ -38,8 +38,7 @@ int main(int argc, char *argv[]) {
         	exit(EXIT_FAILURE);
     	}
     	sem_wait(sem_ready);
-    	sem_close(sem_ready);
-    	sem_unlink(SEM_READY);
+    	//sem_unlink(SEM_READY);
 
 	// abriendo memoria compartida
 	int sm_fd = shm_open(SMOBJ_NAME, O_RDONLY, 0);
@@ -69,7 +68,7 @@ int main(int argc, char *argv[]) {
 	apply_blur(dataImage);
 	
 	// signal: desenfoque aplicado
-	sem_t *sem_blur_done = sem_open(SEM_BLUR_DONE, O_CREAT, 0644, 0);
+	sem_t *sem_blur_done = sem_open(SEM_BLUR_DONE, O_CREAT, 0666, 0);
 	if (sem_blur_done == SEM_FAILED) {
 		fprintf(stderr, "Desenfocador: Error al crear semaforo de blur");
 		munmap(dataImage, sm_size);
@@ -79,20 +78,21 @@ int main(int argc, char *argv[]) {
 	sem_post(sem_blur_done);
 	
 	// esperar a que realzador termine su trabajo
-	sem_t *sem_edge_done = sem_open(SEM_EDGE_DONE, 0);
+	/*
+	sem_t *sem_edge_done = sem_open(SEM_EDGE_DONE, O_CREAT, 0644, 0);
     	if (sem_edge_done == SEM_FAILED) {
         	fprintf(stderr, "Desenfocador: Error al abrir semáforo de realce de bordes\n");
         	munmap(dataImage, sm_size);
         	close(sm_fd);
         	exit(EXIT_FAILURE);
     	}
-	sem_wait(sem_edge_done);
+	sem_wait(sem_edge_done);*/
 
 	munmap(dataImage, sm_size);
 	close(sm_fd);
+	sem_close(sem_ready);
 	sem_close(sem_blur_done);
-	sem_close(sem_edge_done);
-
+	
 	printf("Desenfocador: Proceso de desenfoque terminado con exito!\n\n");
 
 	exit(EXIT_SUCCESS);
