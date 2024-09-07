@@ -52,6 +52,7 @@ void readImageData(FILE *srcFile, BMP_Image *dataImage, int dataSize) {
 
     fseek(srcFile, dataImage->header.offset, SEEK_SET);
     for (int i = 0; i < dataImage->norm_height; i++) {
+        //manejador de error
         fread(dataImage->pixels[i], sizeof(Pixel), dataImage->header.width_px, srcFile);
     }
 }

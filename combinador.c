@@ -1,102 +1,121 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <errno.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <semaphore.h>
-#include <string.h>
 #include "bmp.h"
 
 #define SMOBJ_NAME "/img_sm"
-#define SEM_BLUR_DONE "/sem_blur_done"
 #define SEM_EDGE_DONE "/sem_edge_done"
 
-int save_result_image(BMP_Image *image, const char *output) {
-	FILE *file = fopen(output, "wb");
-	if (file == NULL) {
-		fprintf(stderr, "Combinador: Error al abrir archivo de salida\n");
-		exit(EXIT_FAILURE);
-	}
+// Función para guardar la imagen combinada en disco
+void save_image(const char *filename, BMP_Image *img) {
+    FILE *fptr = fopen(filename, "wb");
+    if (fptr == NULL) {
+        fprintf(stderr, "Combinador: Error al abrir archivo de salida para guardar imagen\n");
+        exit(EXIT_FAILURE);
+    }
 
-	printf("Combinador: Proceso terminado con exito.\n");
+    // Escribir encabezado BMP
+    fwrite(&img->header, sizeof(BMP_Header), 1, fptr);
 
-	fclose(file);
+    // Escribir datos de la imagen
+    int row_size = ((img->header.width_px * 3 + 3) / 4) * 4;  // Tamaño de fila alineada a 4 bytes
+    for (int i = 0; i < img->header.height_px; i++) {
+        fwrite(img->pixels[i], row_size, 1, fptr);
+    }
 
-	return 0;
+    fclose(fptr);
+}
+
+// Función para combinar las dos mitades de la imagen
+void combine_image_halves(BMP_Image *img, BMP_Image *upper_half, BMP_Image *lower_half) {
+    int width = img->header.width_px;
+    int height = img->header.height_px;
+
+    // Asumimos que la imagen se divide en dos mitades horizontales
+    int half_height = height / 2;
+
+    // Copiar la mitad superior
+    for (int y = 0; y < half_height; y++) {
+        memcpy(img->pixels[y], upper_half->pixels[y], width * sizeof(Pixel));
+    }
+
+    // Copiar la mitad inferior
+    for (int y = 0; y < height - half_height; y++) {
+        memcpy(img->pixels[half_height + y], lower_half->pixels[y], width * sizeof(Pixel));
+    }
 }
 
 int main(int argc, char *argv[]) {
+    if (argc != 2) {
+        fprintf(stderr, "Combinador: Uso %s <ruta_imagen_salida>\n", argv[0]);
+        exit(EXIT_FAILURE);
+    }
 
-	if (argc != 2) {
-		fprintf(stderr, "Combinador: Uso %s <ruta_imagen_salida>\n", argv[0]);
-		exit(EXIT_FAILURE);
-	}
+    printf("Combinador: Iniciando proceso de combinación...\n");
 
-	const char *output_filename = argv[1];
+    sem_t *sem_edge_done = sem_open(SEM_EDGE_DONE, 0);
+    if (sem_edge_done == SEM_FAILED) {
+        fprintf(stderr, "Combinador: Error al abrir semáforo SEM_EDGE_DONE\n");
+        exit(EXIT_FAILURE);
+    }
 
-	printf("Combinador: Iniciando proceso de combinacion...\n");
+    int sm_fd = shm_open(SMOBJ_NAME, O_RDONLY, 0);
+    if (sm_fd == -1) {
+        fprintf(stderr, "Combinador: Error al abrir memoria compartida\n");
+        sem_close(sem_edge_done);
+        exit(EXIT_FAILURE);
+    }
 
-	// esperar a que el desenfocador termine
-	sem_t *sem_blur_done = sem_open(SEM_BLUR_DONE, 0);
-	if (sem_blur_done == SEM_FAILED) {
-		fprintf(stderr, "Combinador: Error al abrir semaforo de desenfoque\n");
-		exit(EXIT_FAILURE);
-	}
-	sem_wait(sem_blur_done);
-	sem_close(sem_blur_done);
-	//sem_unlink(SEM_BLUR_DONE);
+    struct stat shmobj_st;
+    if (fstat(sm_fd, &shmobj_st) == -1) {
+        fprintf(stderr, "Combinador: Error al obtener tamaño de memoria compartida\n");
+        sem_close(sem_edge_done);
+        exit(EXIT_FAILURE);
+    }
 
-	// esperar a que el realzador termine
-	sem_t *sem_edge_done = sem_open(SEM_EDGE_DONE, 0);
-	if (sem_edge_done == SEM_FAILED) {
-		fprintf(stderr, "Combinador: Error al abrir semaforo de realce\n");
-		exit(EXIT_FAILURE);
-	}
-	sem_wait(sem_edge_done);
-	sem_close(sem_edge_done);
-	//sem_unlink(SEM_EDGE_DONE);
+    size_t sm_size = shmobj_st.st_size;
 
-	// abrir memoria compartida
-	int sm_fd = shm_open(SMOBJ_NAME, O_RDWR, 0);
-	if (sm_fd == -1) {
-		fprintf(stderr, "Combinador: Error al abrir memoria compartida\n");
-		exit(EXIT_FAILURE);
-	}
+    BMP_Image *dataImage = mmap(NULL, sm_size, PROT_READ, MAP_SHARED, sm_fd, 0);
+    if (dataImage == MAP_FAILED) {
+        fprintf(stderr, "Combinador: Error al mapear imagen en memoria compartida\n");
+        sem_close(sem_edge_done);
+        close(sm_fd);
+        exit(EXIT_FAILURE);
+    }
 
-	// obtener tamano de memoria compartida
-	struct stat shmobj_st;
-	if (fstat(sm_fd, &shmobj_st) == -1) {
-		fprintf(stderr, "Combinador: Error al obtener tamano de memoria compartida\n");
-		close(sm_fd);
-		exit(EXIT_FAILURE);
-	}
+    // Esperar a que el realzador termine
+    sem_wait(sem_edge_done);
 
-	size_t sm_size = shmobj_st.st_size;
+    // Aquí se asume que la imagen en memoria compartida contiene la mitad superior y la mitad inferior
+    // Se deben ajustar los punteros según cómo se dividan las mitades en la memoria compartida.
+    
+    // Para fines demostrativos, vamos a simular que la imagen está dividida en dos mitades
+    // En una implementación real, necesitarás ajustar cómo se obtiene y combina estas mitades.
 
-	// mapeo de imagen de memoria compartida
-	BMP_Image *dataImage = mmap(NULL, sm_size, PROT_READ | PROT_WRITE, MAP_SHARED, sm_fd, 0);
-	if (dataImage == MAP_FAILED) {
-		fprintf(stderr, "Combinador: Error al mapear imagen en memoria compartida\n");
-		close(sm_fd);
-		exit(EXIT_FAILURE);
-	}
+    BMP_Image *upper_half = malloc(sizeof(BMP_Image));
+    BMP_Image *lower_half = malloc(sizeof(BMP_Image));
 
-	/* combinacion de ambas mitades */
+    // Combinar las dos mitades
+    combine_image_halves(dataImage, upper_half, lower_half);
 
-	// guardar imagen en archivo de salida
-	if (save_result_image(dataImage, output_filename) != 0) {
-		fprintf(stderr, "Combinador: Error al guardar imagen en disco\n");
-		munmap(dataImage, sm_size);
-		close(sm_fd);
-		exit(EXIT_FAILURE);
-	}
+    // Guardar la imagen combinada en disco
+    save_image(argv[1], dataImage);
 
-	munmap(dataImage, sm_size);
-	close(sm_fd);
+    // Liberar recursos
+    munmap(dataImage, sm_size);
+    close(sm_fd);
+    sem_close(sem_edge_done);
+    free(upper_half);
+    free(lower_half);
 
-	printf("Combinador: Imagen combinada guardada con exito en %s!\n\n", output_filename);
+    printf("Combinador: Proceso de combinación terminado con éxito!\n");
 
-	exit(EXIT_SUCCESS);
-
+    exit(EXIT_SUCCESS);
 }
+
